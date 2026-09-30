@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/
+.env
+.env.*
+.dev.vars*
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+test-results/
+test-results-db-*/
+test-results-journey-*/
