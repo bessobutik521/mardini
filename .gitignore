@@ -1,7 +1,0 @@
-node_modules/
-dist/
-data/
-.env
-test-results/
-test-results-db-*/
-test-results-journey-*/
