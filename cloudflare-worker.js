@@ -520,13 +520,18 @@ async function handleGetService(req, id) {
 // PUT /api/admin/services/:id - Update service
 async function handleUpdateService(req, id) {
   try {
-    const b = req.body;
-    // Note: In a real Worker, parsing body depends on content type
-    // This is a simplified handler
-    return new Response(
-      JSON.stringify({ ok: true, message: 'Service update handler needs implementation' }),
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    if (!await requireAdmin(req)) return json({ error: 'Unauthorized' }, 401);
+    const b = await req.json();
+    const minimum = Number(b.minimum);
+    const maximum = b.maximum === '' || b.maximum == null ? null : Number(b.maximum);
+    if (!Number.isFinite(minimum) || minimum < 0 || (maximum !== null && (!Number.isFinite(maximum) || maximum < minimum))) return json({ error: 'حدود الخدمة غير صالحة' }, 400);
+    const directions = Array.isArray(b.directions) ? b.directions : [];
+    const currencies = Array.isArray(b.currencies) ? b.currencies : [];
+    if (!directions.length || !currencies.length) return json({ error: 'يجب اختيار اتجاه وعملة واحدة على الأقل' }, 400);
+    const row = { name: String(b.name || '').trim(), description: String(b.description || '').trim(), minimum, maximum, note: String(b.note || ''), directions, currencies, active: b.active !== false };
+    if (!row.name) return json({ error: 'اسم الخدمة مطلوب' }, 400);
+    const { error } = await supabaseAdmin.from('services').update(row).eq('id', id);
+    return error ? json({ error: error.message }, 500) : json({ ok: true });
   } catch (e) {
     return new Response(
       JSON.stringify({ error: e.message }),
@@ -717,12 +722,12 @@ async function handleGetSettings(req) {
 // PUT /api/admin/settings - Update platform settings
 async function handleUpdateSettings(req) {
   try {
-    const b = req.body;
-    if (b.logo && !/^https:\/\//.test(b.logo) && !(b.logo.startsWith('/') && !b.logo.startsWith('//'))) throw new Error('Invalid logo URL');
-    if (b.support_link && !/^https:\/\//.test(b.support_link) && !(b.support_link.startsWith('/') && !b.support_link.startsWith('//'))) throw new Error('Invalid support link');
+    if (!await requireAdmin(req)) return json({ error: 'Unauthorized' }, 401);
+    const b = await req.json();
+    if (b.logo && !/^https:\/\//.test(b.logo) && !(b.logo.startsWith('/') && !b.logo.startsWith('//'))) return json({ error: 'رابط الشعار غير صالح' }, 400);
+    if (b.support_link && !/^https:\/\//.test(b.support_link) && !(b.support_link.startsWith('/') && !b.support_link.startsWith('//'))) return json({ error: 'رابط الدعم غير صالح' }, 400);
 
-    const updatedAt = new Date().toISOString();
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('platform_settings')
       .update({
         name: b.name || '',
@@ -734,6 +739,7 @@ async function handleUpdateSettings(req) {
         announcement: b.announcement || ''
       })
       .eq('id', 1);
+    if (error) return json({ error: error.message }, 500);
 
     return new Response(
       JSON.stringify({ ok: true }),
@@ -973,6 +979,8 @@ export default {
             if (action === 'config' && request.method === 'GET') return handleAdminConfig(request);
             if (action === 'orders' && request.method === 'GET') return handleAdminOrders(request);
             if (action === 'stats' && request.method === 'GET') return handleAdminStats(request);
+            if (action === 'settings' && request.method === 'PUT') return handleUpdateSettings(request);
+            if (action === 'services' && subId && request.method === 'PUT') return handleUpdateService(request, subId);
             if (action === 'tiers' && ['POST','PUT','DELETE'].includes(request.method)) return adminSaveTier(request, subId);
             if (action === 'rate' && request.method === 'PUT') return adminSaveRate(request);
             if (action === 'networks' && subId && request.method === 'PUT') return adminSaveNetwork(request, subId);
