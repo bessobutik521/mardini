@@ -15,6 +15,18 @@ import { calculate } from './server/calculation.js';
 let supabaseAdmin;
 let workerEnv;
 
+function parseList(value) {
+  if (Array.isArray(value)) return value;
+  if (value == null || value === '') return [];
+  const text = String(value).trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {}
+  return text.split(',').map(item => item.trim()).filter(Boolean);
+}
+
 // ===== Serve frontend from dist/ =====
 function serveFrontend(url) {
   // If pathname is / or /index.html, try to serve the built React app
@@ -132,8 +144,8 @@ async function handleConfig(req) {
         rates: { buyUsd: Number(rateRow.buy_usd_rate ?? rateRow.rate), sellUsd: Number(rateRow.sell_usd_rate ?? rateRow.rate) },
         services: services.map(s => ({
           ...s,
-          directions: JSON.parse(s.directions),
-          currencies: JSON.parse(s.currencies)
+          directions: parseList(s.directions),
+          currencies: parseList(s.currencies)
         })),
         tiers,
         networks,
