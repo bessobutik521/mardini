@@ -3,6 +3,8 @@
 // Also serves the React frontend from dist/
 
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { scrypt } from '@noble/hashes/scrypt';
+import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 // Environment variables (set in Cloudflare dashboard, not in code)
 // - SUPABASE_URL: Your Supabase project URL
 // - SUPABASE_SERVICE_ROLE_KEY: Your service role key (kept as secret)
@@ -716,73 +718,91 @@ async function handleUpdateSettings(req) {
   }
 }
 
+function json(data, status = 200, headers = {}) {
+  return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...headers } });
+}
+function cookieToken(req) {
+  const m = (req.headers.get('cookie') || '').match(/(?:^|;\s*)mardini_admin=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
+}
+async function requireAdmin(req) {
+  const token = cookieToken(req);
+  if (!token) return null;
+  const { data } = await supabaseAdmin.from('admin_sessions').select('admin_id,expires').eq('token_hash', btoa(token)).maybeSingle();
+  if (!data || Number(data.expires) <= Date.now()) return null;
+  return data;
+}
+function verifyScryptPassword(password, stored) {
+  try {
+    const [salt, expectedHex] = String(stored || '').split(':');
+    if (!salt || !expectedHex) return false;
+    const expected = hexToBytes(expectedHex);
+    const actual = scrypt(utf8ToBytes(password), utf8ToBytes(salt), { N: 16384, r: 8, p: 1, dkLen: expected.length });
+    if (actual.length !== expected.length) return false;
+    let diff = 0;
+    for (let i = 0; i < actual.length; i++) diff |= actual[i] ^ expected[i];
+    return diff === 0;
+  } catch { return false; }
+}
+
 // POST /api/admin/login - Admin login
 async function handleAdminLogin(req) {
   try {
-    const formData = await req.formData();
-    const username = formData.get('username') || '';
-    const password = formData.get('password') || '';
+    const body = await req.json();
+    const username = String(body.username || '').trim();
+    const password = String(body.password || '');
+    const { data: user, error: uErr } = await supabaseAdmin.from('admin_users').select('id,username,password_hash').eq('username', username).maybeSingle();
+    if (uErr || !user || !verifyScryptPassword(password, user.password_hash)) return json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' }, 401);
 
-    const { data: user, error: uErr } = await supabaseAdmin
-      .from('admin_users')
-      .select('*')
-      .eq('username', username)
-      .single();
-
-    if (uErr || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid username or password' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
-
-    const { error: sessionErr } = await supabaseAdmin
-      .from('admin_sessions')
-      .insert({
-        token_hash: btoa(token),
-        admin_id: user.id,
-        expires: Date.now() + 8 * 3600 * 1000
-      });
-
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const token = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    const expires = Date.now() + 8 * 3600 * 1000;
+    const { error: sessionErr } = await supabaseAdmin.from('admin_sessions').insert({ token_hash: btoa(token), admin_id: user.id, expires });
     if (sessionErr) throw sessionErr;
-
-    return new Response(
-      JSON.stringify({ success: true, token: token, expires_in: 8 * 3600 }),
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    return json({ success: true, expires_in: 8 * 3600 }, 200, { 'Set-Cookie': `mardini_admin=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${8 * 3600}` });
   } catch (e) {
-    return new Response(
-      JSON.stringify({ error: e.message || 'Login failed' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    return json({ error: e.message || 'Login failed' }, 500);
   }
+}
+
+async function handleAdminConfig(req) {
+  if (!await requireAdmin(req)) return json({ error: 'Unauthorized' }, 401);
+  const [settings, rate, services, tiers, networks, wallets] = await Promise.all([
+    supabaseAdmin.from('platform_settings').select('*').eq('id', 1).single(),
+    supabaseAdmin.from('exchange_rates').select('*').eq('id', 1).single(),
+    supabaseAdmin.from('services').select('*'),
+    supabaseAdmin.from('commission_tiers').select('*').order('minimum'),
+    supabaseAdmin.from('networks').select('*'),
+    supabaseAdmin.from('wallets').select('*')
+  ]);
+  const failure = [settings, rate, services, tiers, networks, wallets].find(x => x.error);
+  if (failure) return json({ error: failure.error.message }, 500);
+  return json({ settings: settings.data, rate: rate.data.rate, services: services.data.map(s => ({ ...s, directions: typeof s.directions === 'string' ? JSON.parse(s.directions) : s.directions, currencies: typeof s.currencies === 'string' ? JSON.parse(s.currencies) : s.currencies })), tiers: tiers.data, networks: networks.data, wallets: wallets.data });
+}
+
+async function handleAdminOrders(req) {
+  if (!await requireAdmin(req)) return json({ error: 'Unauthorized' }, 401);
+  const { data, error } = await supabaseAdmin.from('orders').select('*').order('created_at', { ascending: false }).limit(500);
+  return error ? json({ error: error.message }, 500) : json(data || []);
+}
+
+async function handleAdminStats(req) {
+  if (!await requireAdmin(req)) return json({ error: 'Unauthorized' }, 401);
+  const { data, error } = await supabaseAdmin.from('orders').select('status,created_at');
+  if (error) return json({ error: error.message }, 500);
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = data || [];
+  return json({ today: rows.filter(o => String(o.created_at || '').startsWith(today)).length, review: rows.filter(o => o.status === 'قيد المراجعة').length, progress: rows.filter(o => o.status === 'قيد التنفيذ').length, completed: rows.filter(o => o.status === 'مكتملة').length });
 }
 
 // GET /api/admin/logout - Admin logout
 async function handleAdminLogout(req) {
   try {
-    const authHeader = req.headers.get('authorization') || '';
-    const tokenMatch = authHeader.match(/^Bearer\s+(.+)$/);
-
-    if (tokenMatch) {
-      const token = tokenMatch[1];
-      await supabaseAdmin
-        .from('admin_sessions')
-        .delete()
-        .eq('token_hash', btoa(token));
-    }
-
-    return new Response(
-      JSON.stringify({ success: true }),
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    const token = cookieToken(req);
+    if (token) await supabaseAdmin.from('admin_sessions').delete().eq('token_hash', btoa(token));
+    return json({ success: true }, 200, { 'Set-Cookie': 'mardini_admin=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0' });
   } catch (e) {
-    return new Response(
-      JSON.stringify({ error: e.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    return json({ error: e.message }, 500);
   }
 }
 
@@ -901,17 +921,15 @@ export default {
             }
             return handleUpdateSettings(request);
 
-          case 'admin':
-            if (request.method === 'POST') {
-              return handleAdminLogin(request);
-            }
-            if (request.method === 'GET') {
-              return handleAdminLogout(request);
-            }
-            return new Response(
-              JSON.stringify({ error: 'Admin endpoint not found' }),
-              { status: 404, headers: { 'Content-Type': 'application/json' } }
-            );
+          case 'admin': {
+            const action = id;
+            if (action === 'login' && request.method === 'POST') return handleAdminLogin(request);
+            if (action === 'logout' && request.method === 'POST') return handleAdminLogout(request);
+            if (action === 'config' && request.method === 'GET') return handleAdminConfig(request);
+            if (action === 'orders' && request.method === 'GET') return handleAdminOrders(request);
+            if (action === 'stats' && request.method === 'GET') return handleAdminStats(request);
+            return json({ error: 'Admin endpoint not found' }, 404);
+          }
 
           default:
             return new Response(
