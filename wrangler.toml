@@ -5,8 +5,7 @@ compatibility_date = "2024-01-01"
 [assets]
   directory = "dist"
   branch = "main"
-  src = "dist/**
-
+src = "dist/**"
 [env.production]
   # These secrets are set in Cloudflare dashboard, NOT in code or GitHub
   SUPABASE_URL = ""
