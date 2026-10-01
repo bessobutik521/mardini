@@ -9,21 +9,8 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 // - SUPABASE_ANON_KEY: Optional, for certain operations
 // - SUPABASE_STORAGE_BUCKET: Optional, default 'proofs'
 
-const supaUrl = env.SUPABASE_URL;
-const supaKey = env.SUPABASE_SERVICE_ROLE_KEY;
-
-// Create Supabase admin client (has full access)
-// This is ONLY used on the server (Worker), never exposed to browser
-const supabaseAdmin = createSupabaseClient(supaUrl, supaKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-});
-
-// Create public client (for operations that don't need admin rights)
-// Used for user-facing API endpoints that don't require admin privileges
-const supabasePublic = createSupabaseClient(supaUrl, env.SUPABASE_ANON_KEY || '');
+let supabaseAdmin;
+let workerEnv;
 
 // ===== Serve frontend from dist/ =====
 function serveFrontend(url) {
@@ -369,7 +356,7 @@ async function handleUploadProof(req, id) {
 
       const { error: uploadErr } = await supabaseAdmin
         .storage
-        .from(env.SUPABASE_STORAGE_BUCKET || 'proofs')
+        .from(workerEnv.SUPABASE_STORAGE_BUCKET || 'proofs')
         .upload(proofPath, buffer, {
           contentType: proofFile.type || 'image/png'
         });
@@ -383,7 +370,7 @@ async function handleUploadProof(req, id) {
 
       const { data: urlData } = supabaseAdmin
         .storage
-        .from(env.SUPABASE_STORAGE_BUCKET || 'proofs')
+        .from(workerEnv.SUPABASE_STORAGE_BUCKET || 'proofs')
         .getPublicUrl(proofPath);
 
       proofUrl = urlData.publicUrl;
@@ -788,6 +775,19 @@ async function handleAdminLogout(req) {
 // ===== Main Worker Handler =====
 export default {
   async fetch(request, env, ctx) {
+    workerEnv = env;
+
+    supabaseAdmin = createSupabaseClient(
+      env.SUPABASE_URL,
+      env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
+
     const url = new URL(request.url);
     const path = url.pathname;
 
