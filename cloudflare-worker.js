@@ -72,11 +72,25 @@ async function handleConfig(req) {
 
     if (rErr) throw rErr;
 
-    const { data: services, error: svcErr } = await supabaseAdmin
+    let { data: services, error: svcErr } = await supabaseAdmin
       .from('services')
       .select('*');
 
     if (svcErr) throw svcErr;
+
+    // Bootstrap the two built-in services when a fresh Supabase database is empty.
+    if (!services?.length) {
+      const defaults = [
+        { id: 'usdt', name: 'شراء وبيع USDT', description: 'شراء وبيع USDT مقابل رصيد شام كاش', active: true, minimum: 10, maximum: null, note: 'يتم تنفيذ الطلب بعد تأكيد استلام الدفعة. تستغرق المعاملة عادةً حتى 15 دقيقة.', directions: '["sell","buy"]', currencies: '["USD","SYP"]' },
+        { id: 'exchange', name: 'تصريف شام كاش', description: 'تحويل الرصيد بين الدولار والليرة السورية', active: true, minimum: 1, maximum: null, note: 'تصريف رصيدك دون عمولة إضافية. يتم التنفيذ بعد تأكيد استلام الدفعة.', directions: '["usd-syp","syp-usd"]', currencies: '["USD","SYP"]' }
+      ];
+      const { data: seeded, error: seedErr } = await supabaseAdmin
+        .from('services')
+        .upsert(defaults, { onConflict: 'id' })
+        .select('*');
+      if (seedErr) throw seedErr;
+      services = seeded;
+    }
 
     const { data: tiers, error: tierErr } = await supabaseAdmin
       .from('commission_tiers')
@@ -791,9 +805,8 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // ===== Serve frontend from dist/ =====
-    const frontendResponse = serveFrontend(url);
-    if (frontendResponse) return frontendResponse;
+    // Static frontend is served from the Cloudflare ASSETS binding.
+    // Keep API handling in the Worker and delegate all non-API routes to the SPA assets.
 
     // Handle /api/* routes
     if (path.startsWith('/api/')) {
@@ -915,14 +928,7 @@ export default {
       }
     }
 
-    // For non-API routes, serve frontend or return 404
-    if (url.pathname === '/' || url.pathname === '/index.html') {
-      return serveFrontend(url);
-    }
-
-    return new Response(
-      JSON.stringify({ error: 'Not found' }),
-      { status: 404, headers: { 'Content-Type': 'application/json' } }
-    );
+    // Serve Vite's built frontend and let SPA fallback resolve routes such as /admin.
+    return env.ASSETS.fetch(request);
   }
 };
