@@ -112,12 +112,16 @@ async function handleConfig(req) {
 
     const { data: wallets, error: walErr } = await supabaseAdmin
       .from('wallets')
-      .select('currency, address');
+      .select('currency, address, owner_name');
 
     if (walErr) throw walErr;
 
     const walletsObj = wallets.reduce((acc, w) => {
       acc[w.currency] = w.address;
+      return acc;
+    }, {});
+    const walletOwners = wallets.reduce((acc, w) => {
+      acc[w.currency] = w.owner_name || '';
       return acc;
     }, {});
 
@@ -133,7 +137,8 @@ async function handleConfig(req) {
         })),
         tiers,
         networks,
-        wallets: walletsObj
+        wallets: walletsObj,
+        walletOwners
       }),
       { headers: { 'Content-Type': 'application/json' } }
     );
@@ -172,7 +177,7 @@ async function handleCreateOrder(req) {
     const network = String(body.network || '');
     const currency = service === 'usdt' ? (direction === 'sell' ? 'USDT' : balance) : (direction === 'usd-syp' ? 'USD' : 'SYP');
 
-    if (!recipient || recipient.length < 5) {
+    if (service === 'usdt' && (!recipient || recipient.length < 5)) {
       return new Response(
         JSON.stringify({ error: 'Please provide complete recipient data' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
@@ -321,7 +326,7 @@ async function handleGetOrder(req, id) {
     }
 
     return new Response(
-      JSON.stringify({ success: true, order }),
+      JSON.stringify(order),
       { headers: { 'Content-Type': 'application/json' } }
     );
   } catch (e) {
@@ -639,10 +644,13 @@ async function handleListWallets(req, admin) {
 // PUT /api/admin/wallets/:id - Update wallet
 async function handleUpdateWallet(req, id) {
   try {
-    return new Response(
-      JSON.stringify({ ok: true, message: 'Wallet update handler' }),
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    if (!await requireAdmin(req)) return json({ error: 'Unauthorized' }, 401);
+    const b = await req.json();
+    const address = String(b.address || '').trim();
+    const ownerName = String(b.owner_name || '').trim();
+    if (!address) return json({ error: 'رقم حساب شام كاش مطلوب' }, 400);
+    const { error } = await supabaseAdmin.from('wallets').update({ address, owner_name: ownerName }).eq('id', id);
+    return error ? json({ error: error.message }, 500) : json({ ok: true });
   } catch (e) {
     return new Response(
       JSON.stringify({ error: e.message }),
@@ -981,6 +989,7 @@ export default {
             if (action === 'stats' && request.method === 'GET') return handleAdminStats(request);
             if (action === 'settings' && request.method === 'PUT') return handleUpdateSettings(request);
             if (action === 'services' && subId && request.method === 'PUT') return handleUpdateService(request, subId);
+            if (action === 'wallets' && subId && request.method === 'PUT') return handleUpdateWallet(request, subId);
             if (action === 'tiers' && ['POST','PUT','DELETE'].includes(request.method)) return adminSaveTier(request, subId);
             if (action === 'rate' && request.method === 'PUT') return adminSaveRate(request);
             if (action === 'networks' && subId && request.method === 'PUT') return adminSaveNetwork(request, subId);
