@@ -2,8 +2,7 @@
 // Handles all /api/* routes using Supabase instead of SQLite
 // Also serves the React frontend from dist/
 
-import { createClient } from '@supabase/ssr';
-
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 // Environment variables (set in Cloudflare dashboard, not in code)
 // - SUPABASE_URL: Your Supabase project URL
 // - SUPABASE_SERVICE_ROLE_KEY: Your service role key (kept as secret)
