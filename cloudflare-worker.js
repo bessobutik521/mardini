@@ -832,7 +832,7 @@ async function handleAdminConfig(req) {
   ]);
   const failure = [settings, rate, services, tiers, networks, wallets].find(x => x.error);
   if (failure) return json({ error: failure.error.message }, 500);
-  return json({ settings: settings.data, rate: rate.data.rate, rates: { buyUsd: Number(rate.data.buy_usd_rate ?? rate.data.rate), sellUsd: Number(rate.data.sell_usd_rate ?? rate.data.rate) }, services: services.data.map(s => ({ ...s, directions: typeof s.directions === 'string' ? JSON.parse(s.directions) : s.directions, currencies: typeof s.currencies === 'string' ? JSON.parse(s.currencies) : s.currencies })), tiers: tiers.data, networks: networks.data, wallets: wallets.data });
+  return json({ settings: settings.data, rate: rate.data.rate, rates: { buyUsd: Number(rate.data.buy_usd_rate ?? rate.data.rate), sellUsd: Number(rate.data.sell_usd_rate ?? rate.data.rate) }, services: services.data.map(s => ({ ...s, directions: parseList(s.directions), currencies: parseList(s.currencies) })), tiers: tiers.data, networks: networks.data, wallets: wallets.data });
 }
 
 async function adminSaveTier(req, tierId) {
@@ -844,7 +844,8 @@ async function adminSaveTier(req, tierId) {
   const q=tierId?supabaseAdmin.from('commission_tiers').update(row).eq('id',tierId):supabaseAdmin.from('commission_tiers').insert(row); const {error}=await q; return error?json({error:error.message},500):json({ok:true});
 }
 async function adminSaveRate(req) { if(!await requireAdmin(req))return json({error:'Unauthorized'},401);const b=await req.json(),buy=Number(b.buyUsd),sell=Number(b.sellUsd);if(!(buy>0&&sell>0))return json({error:'أسعار الصرف غير صالحة'},400);const {error}=await supabaseAdmin.from('exchange_rates').update({buy_usd_rate:buy,sell_usd_rate:sell,rate:buy,updated_at:new Date().toISOString()}).eq('id',1);return error?json({error:error.message},500):json({ok:true}); }
-async function adminSaveNetwork(req, networkId) { if(!await requireAdmin(req))return json({error:'Unauthorized'},401);const b=await req.json();const row={name:b.name,address:b.address||'',active:b.active!==false,buy_fee:Number(b.buy_fee||0)};if(!Number.isFinite(row.buy_fee)||row.buy_fee<0)return json({error:'رسوم الشبكة غير صالحة'},400);const {error}=await supabaseAdmin.from('networks').update(row).eq('id',networkId);return error?json({error:error.message},500):json({ok:true}); }
+async function adminSaveNetwork(req, networkId) { if(!await requireAdmin(req))return json({error:'Unauthorized'},401);if(req.method==='DELETE'){const {error}=await supabaseAdmin.from('networks').delete().eq('id',networkId);return error?json({error:error.message},500):json({ok:true});}const b=await req.json();const row={name:String(b.name||'').trim(),address:String(b.address||'').trim(),active:b.active!==false,buy_fee:Number(b.buy_fee||0)};if(!row.name)return json({error:'اسم الشبكة مطلوب'},400);if(!Number.isFinite(row.buy_fee)||row.buy_fee<0)return json({error:'رسوم الشبكة غير صالحة'},400);const q=networkId?supabaseAdmin.from('networks').update(row).eq('id',networkId):supabaseAdmin.from('networks').insert(row);const {error}=await q;return error?json({error:error.message},500):json({ok:true}); }
+async function adminSaveWallet(req, walletId) { if(!await requireAdmin(req))return json({error:'Unauthorized'},401);const b=await req.json();const row={currency:String(b.currency||'').trim().toUpperCase(),address:String(b.address||'').trim(),owner_name:String(b.owner_name||'').trim()};if(!['USD','SYP'].includes(row.currency))return json({error:'عملة حساب شام كاش غير صالحة'},400);const q=walletId?supabaseAdmin.from('wallets').update(row).eq('id',walletId):supabaseAdmin.from('wallets').insert(row);const {error}=await q;return error?json({error:error.message},500):json({ok:true}); }
 
 async function handleAdminOrders(req) {
   if (!await requireAdmin(req)) return json({ error: 'Unauthorized' }, 401);
@@ -1001,10 +1002,10 @@ export default {
             if (action === 'stats' && request.method === 'GET') return handleAdminStats(request);
             if (action === 'settings' && request.method === 'PUT') return handleUpdateSettings(request);
             if (action === 'services' && subId && request.method === 'PUT') return handleUpdateService(request, subId);
-            if (action === 'wallets' && subId && request.method === 'PUT') return handleUpdateWallet(request, subId);
+            if (action === 'wallets' && ['POST','PUT'].includes(request.method)) return adminSaveWallet(request, subId);
             if (action === 'tiers' && ['POST','PUT','DELETE'].includes(request.method)) return adminSaveTier(request, subId);
             if (action === 'rate' && request.method === 'PUT') return adminSaveRate(request);
-            if (action === 'networks' && subId && request.method === 'PUT') return adminSaveNetwork(request, subId);
+            if (action === 'networks' && ['POST','PUT','DELETE'].includes(request.method)) return adminSaveNetwork(request, subId);
             return json({ error: 'Admin endpoint not found' }, 404);
           }
 
