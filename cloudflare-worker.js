@@ -5,6 +5,7 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { scrypt } from '@noble/hashes/scrypt';
 import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
+import { calculate } from './server/calculation.js';
 // Environment variables (set in Cloudflare dashboard, not in code)
 // - SUPABASE_URL: Your Supabase project URL
 // - SUPABASE_SERVICE_ROLE_KEY: Your service role key (kept as secret)
@@ -124,6 +125,7 @@ async function handleConfig(req) {
       JSON.stringify({
         settings,
         rate: rateRow.rate,
+        rates: { buyUsd: Number(rateRow.buy_usd_rate ?? rateRow.rate), sellUsd: Number(rateRow.sell_usd_rate ?? rateRow.rate) },
         services: services.map(s => ({
           ...s,
           directions: JSON.parse(s.directions),
@@ -161,13 +163,14 @@ async function handleQuote(req, body) {
 // POST /api/orders - Create new order
 async function handleCreateOrder(req) {
   try {
-    const formData = await req.formData();
-    const recipient = formData.get('recipient') || '';
-    const service = formData.get('service') || '';
-    const direction = formData.get('direction') || '';
-    const amount = formData.get('amount') ? Number(formData.get('amount')) : 0;
-    const currency = formData.get('currency') || '';
-    const network = formData.get('network') || '';
+    const body = await req.json();
+    const recipient = String(body.recipient || '').trim();
+    const service = String(body.service || '');
+    const direction = String(body.direction || '');
+    const amount = Number(body.amount || 0);
+    const balance = String(body.balance || 'USD');
+    const network = String(body.network || '');
+    const currency = service === 'usdt' ? (direction === 'sell' ? 'USDT' : balance) : (direction === 'usd-syp' ? 'USD' : 'SYP');
 
     if (!recipient || recipient.length < 5) {
       return new Response(
@@ -232,15 +235,20 @@ async function handleCreateOrder(req) {
     // Generate order ID
     const orderId = 'MRD-' + Math.random().toString(36).substring(2, 8).toUpperCase();
 
-    // Calculate commission (simplified)
-    const commissionPercent = serviceData.commission_percent || 2;
-    const commissionFixed = serviceData.commission_fixed_amount || 0;
-    let commission = commissionPercent;
-    if (commissionFixed > 0) commission = commissionFixed;
-
-    // Calculate final amount (simplified)
-    const finalAmount = amount;
-    const finalCurrency = currency;
+    const [{ data: rateRow, error: rateErr }, { data: tiers, error: tierErr }, { data: activeNetworks, error: netsErr }, { data: settings, error: settingsErr }] = await Promise.all([
+      supabaseAdmin.from('exchange_rates').select('*').eq('id', 1).single(),
+      supabaseAdmin.from('commission_tiers').select('*').eq('active', true).order('minimum'),
+      supabaseAdmin.from('networks').select('*').eq('active', true),
+      supabaseAdmin.from('platform_settings').select('*').eq('id', 1).single()
+    ]);
+    if (rateErr || tierErr || netsErr || settingsErr) throw (rateErr || tierErr || netsErr || settingsErr);
+    const quoteConfig = { settings, rate: rateRow.rate, rates: { buyUsd: Number(rateRow.buy_usd_rate ?? rateRow.rate), sellUsd: Number(rateRow.sell_usd_rate ?? rateRow.rate) }, services: [{ ...serviceData, directions: typeof serviceData.directions === 'string' ? JSON.parse(serviceData.directions) : serviceData.directions, currencies: typeof serviceData.currencies === 'string' ? JSON.parse(serviceData.currencies) : serviceData.currencies }], tiers, networks: activeNetworks };
+    const quote = calculate({ service, direction, amount, balance, network, recipient }, quoteConfig);
+    const commissionPercent = 0;
+    const commissionFixed = Number(quote.commission || 0) + Number(quote.networkFee || 0);
+    const commission = commissionFixed;
+    const finalAmount = quote.finalAmount;
+    const finalCurrency = quote.finalCurrency;
 
     // Insert order into Supabase
     const { data: order, error: insertErr } = await supabaseAdmin
@@ -256,13 +264,13 @@ async function handleCreateOrder(req) {
         recipient: recipient,
         commission_percent: commissionPercent,
         commission: commission,
-        exchange_rate: rateRow.rate,
+        exchange_rate: quote.rate,
         final_amount: finalAmount,
         final_currency: finalCurrency,
         service_name: serviceData.name,
         service_note: serviceData.note,
         status: 'بانتظار الدفع',
-        commission_type: serviceData.commission_type || 'percent',
+        commission_type: service === 'exchange' ? 'none' : 'fixed',
         commission_fixed_amount: commissionFixed
       })
       .select();
@@ -458,6 +466,27 @@ async function handleListServices(req) {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
+}
+
+// Service icons are stored under deterministic paths, so no database schema change is required.
+async function handleServiceIcon(req, id) {
+  const safeId = String(id || '').replace(/[^a-z0-9_-]/gi, '');
+  if (!safeId) return json({ error: 'Invalid service' }, 400);
+  const bucket = workerEnv.SUPABASE_STORAGE_BUCKET || 'proofs';
+  if (req.method === 'POST') {
+    if (!await requireAdmin(req)) return json({ error: 'Unauthorized' }, 401);
+    const form = await req.formData();
+    const file = form.get('icon');
+    if (!file || typeof file.arrayBuffer !== 'function') return json({ error: 'اختر صورة الأيقونة أولًا' }, 400);
+    if (!['image/png','image/jpeg','image/webp','image/svg+xml'].includes(file.type)) return json({ error: 'الصيغة المدعومة PNG أو JPG أو WEBP أو SVG' }, 400);
+    if (file.size > 2 * 1024 * 1024) return json({ error: 'حجم الأيقونة يجب ألا يتجاوز 2MB' }, 400);
+    const { error } = await supabaseAdmin.storage.from(bucket).upload(`service-icons/${safeId}`, file, { contentType: file.type, upsert: true, cacheControl: '60' });
+    if (error) return json({ error: error.message }, 500);
+    return json({ success: true, url: `/api/service-icon/${safeId}?v=${Date.now()}` });
+  }
+  const { data, error } = await supabaseAdmin.storage.from(bucket).download(`service-icons/${safeId}`);
+  if (error || !data) return new Response(null, { status: 404 });
+  return new Response(data, { headers: { 'Content-Type': data.type || 'image/png', 'Cache-Control': 'public, max-age=60' } });
 }
 
 // GET /api/admin/services/:id - Get service by ID
@@ -777,8 +806,19 @@ async function handleAdminConfig(req) {
   ]);
   const failure = [settings, rate, services, tiers, networks, wallets].find(x => x.error);
   if (failure) return json({ error: failure.error.message }, 500);
-  return json({ settings: settings.data, rate: rate.data.rate, services: services.data.map(s => ({ ...s, directions: typeof s.directions === 'string' ? JSON.parse(s.directions) : s.directions, currencies: typeof s.currencies === 'string' ? JSON.parse(s.currencies) : s.currencies })), tiers: tiers.data, networks: networks.data, wallets: wallets.data });
+  return json({ settings: settings.data, rate: rate.data.rate, rates: { buyUsd: Number(rate.data.buy_usd_rate ?? rate.data.rate), sellUsd: Number(rate.data.sell_usd_rate ?? rate.data.rate) }, services: services.data.map(s => ({ ...s, directions: typeof s.directions === 'string' ? JSON.parse(s.directions) : s.directions, currencies: typeof s.currencies === 'string' ? JSON.parse(s.currencies) : s.currencies })), tiers: tiers.data, networks: networks.data, wallets: wallets.data });
 }
+
+async function adminSaveTier(req, tierId) {
+  if (!await requireAdmin(req)) return json({error:'Unauthorized'},401);
+  if (req.method==='DELETE') { const {error}=await supabaseAdmin.from('commission_tiers').delete().eq('id',tierId); return error?json({error:error.message},500):json({ok:true}); }
+  const b=await req.json(); const row={direction:b.direction==='buy'?'buy':'sell',minimum:Number(b.minimum),maximum:b.maximum===''||b.maximum==null?null:Number(b.maximum),type:'fixed',fixed_amount:Number(b.fixed_amount||0),percent:0,active:b.active!==false};
+  if(!Number.isInteger(row.minimum)||row.minimum<0||(row.maximum!==null&&(!Number.isInteger(row.maximum)||row.maximum<row.minimum))||!Number.isFinite(row.fixed_amount)||row.fixed_amount<0)return json({error:'حدود الشرائح يجب أن تكون أرقامًا صحيحة، والنهاية لا تقل عن البداية'},400);
+  const {data:all}=await supabaseAdmin.from('commission_tiers').select('id,direction,minimum,maximum'); const clash=(all||[]).some(t=>String(t.id)!==String(tierId)&&t.direction===row.direction&&row.minimum<=Number(t.maximum??Infinity)&&Number(t.minimum)<=Number(row.maximum??Infinity)); if(clash)return json({error:'حدود هذه الشريحة تتداخل مع شريحة أخرى'},400);
+  const q=tierId?supabaseAdmin.from('commission_tiers').update(row).eq('id',tierId):supabaseAdmin.from('commission_tiers').insert(row); const {error}=await q; return error?json({error:error.message},500):json({ok:true});
+}
+async function adminSaveRate(req) { if(!await requireAdmin(req))return json({error:'Unauthorized'},401);const b=await req.json(),buy=Number(b.buyUsd),sell=Number(b.sellUsd);if(!(buy>0&&sell>0))return json({error:'أسعار الصرف غير صالحة'},400);const {error}=await supabaseAdmin.from('exchange_rates').update({buy_usd_rate:buy,sell_usd_rate:sell,rate:buy,updated_at:new Date().toISOString()}).eq('id',1);return error?json({error:error.message},500):json({ok:true}); }
+async function adminSaveNetwork(req, networkId) { if(!await requireAdmin(req))return json({error:'Unauthorized'},401);const b=await req.json();const row={name:b.name,address:b.address||'',active:b.active!==false,buy_fee:Number(b.buy_fee||0)};if(!Number.isFinite(row.buy_fee)||row.buy_fee<0)return json({error:'رسوم الشبكة غير صالحة'},400);const {error}=await supabaseAdmin.from('networks').update(row).eq('id',networkId);return error?json({error:error.message},500):json({ok:true}); }
 
 async function handleAdminOrders(req) {
   if (!await requireAdmin(req)) return json({ error: 'Unauthorized' }, 401);
@@ -833,6 +873,7 @@ export default {
       const parts = path.replace('/api/', '').split('/');
       const endpoint = parts[0];
       const id = parts[1] || null;
+      const subId = parts[2] || null;
 
       const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
@@ -873,8 +914,12 @@ export default {
               { status: 404, headers: { 'Content-Type': 'application/json' } }
             );
 
+          case 'service-icon':
+            if (id && (request.method === 'GET' || request.method === 'POST')) return handleServiceIcon(request, id);
+            return json({ error: 'Not found' }, 404);
+
           case 'admin-services':
-            return handleListServices(req);
+            return handleListServices(request);
 
           case 'admin-service':
             if (id) {
@@ -928,6 +973,9 @@ export default {
             if (action === 'config' && request.method === 'GET') return handleAdminConfig(request);
             if (action === 'orders' && request.method === 'GET') return handleAdminOrders(request);
             if (action === 'stats' && request.method === 'GET') return handleAdminStats(request);
+            if (action === 'tiers' && ['POST','PUT','DELETE'].includes(request.method)) return adminSaveTier(request, subId);
+            if (action === 'rate' && request.method === 'PUT') return adminSaveRate(request);
+            if (action === 'networks' && subId && request.method === 'PUT') return adminSaveNetwork(request, subId);
             return json({ error: 'Admin endpoint not found' }, 404);
           }
 

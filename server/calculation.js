@@ -2,35 +2,53 @@ export function calculate(input, config) {
   const service = config.services.find(s => s.id === input.service);
   if (!config.settings.active) throw new Error('المنصة متوقفة مؤقتًا. يرجى المحاولة لاحقًا.');
   if (!service?.active) throw new Error('هذه الخدمة متوقفة مؤقتًا.');
-  if (!service.directions.includes(input.direction)) throw new Error('يرجى اختيار اتجاه متاح.');
+
   const amount = Number(input.amount);
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1e12) throw new Error('أدخل مبلغًا صحيحًا أكبر من صفر.');
-  const rate = config.rate;
-  let currency, finalCurrency, base;
-  if (service.id === 'usdt') {
-    if (!service.currencies.includes(input.balance)) throw new Error('يرجى اختيار عملة متاحة.');
-    currency = input.direction === 'sell' ? 'USDT' : input.balance;
-    finalCurrency = input.direction === 'sell' ? input.balance : 'USDT';
-    base = currency === 'SYP' ? amount / rate : amount;
-  } else {
-    currency = input.direction === 'usd-syp' ? 'USD' : 'SYP';
-    finalCurrency = currency === 'USD' ? 'SYP' : 'USD';
-    if (!service.currencies.includes(currency) || !service.currencies.includes(finalCurrency)) throw new Error('عملة هذا الاتجاه متوقفة مؤقتًا.');
-    base = currency === 'SYP' ? amount / rate : amount;
+
+  const rates = config.rates || { buyUsd: config.rate, sellUsd: config.rate };
+  const buyUsd = Number(rates.buyUsd);
+  const sellUsd = Number(rates.sellUsd);
+  if (!(buyUsd > 0) || !(sellUsd > 0)) throw new Error('أسعار الصرف غير صالحة.');
+
+  if (service.id === 'exchange') {
+    if (!service.directions.includes(input.direction)) throw new Error('اختر اتجاه صرف متاحًا.');
+    const currency = input.direction === 'usd-syp' ? 'USD' : 'SYP';
+    if (!service.currencies.includes(currency)) throw new Error('هذه العملة غير متاحة.');
+    const rate = input.direction === 'usd-syp' ? sellUsd : buyUsd;
+    const base = currency === 'SYP' ? amount / rate : amount;
+    if (base < Number(service.minimum || 0)) throw new Error(`الحد الأدنى لهذه العملية هو ${service.minimum} دولار.`);
+    if (service.maximum != null && base > Number(service.maximum)) throw new Error(`الحد الأقصى لهذه العملية هو ${service.maximum} دولار.`);
+    const finalAmount = currency === 'USD' ? amount * rate : amount / rate;
+    return { amount, currency, finalCurrency: currency === 'USD' ? 'SYP' : 'USD', commission: 0, networkFee: 0, rate, finalAmount, commissionType: 'none' };
   }
-  const unit = service.id === 'usdt' ? 'USDT' : 'دولار';
-  if (base < service.minimum) throw new Error(`الحد الأدنى لهذه العملية هو ${service.minimum} ${unit}${currency === 'SYP' ? `، أي ${service.minimum * rate} ليرة سورية` : ''}.`);
-  if (service.maximum != null && base > service.maximum) throw new Error(`الحد الأقصى لهذه العملية هو ${service.maximum} ${unit}.`);
-  const tier = config.tiers.filter(t => t.active && base >= t.minimum && (t.maximum == null || base <= t.maximum)).sort((a,b) => a.minimum - b.minimum)[0];
-  if (service.id === 'usdt' && !tier) throw new Error('لا توجد شريحة عمولة لهذا المبلغ. يرجى التواصل مع الدعم.');
-  const commissionType = service.id === 'usdt' ? (tier.type || 'percent') : 'none';
-  const percent = commissionType === 'percent' ? tier.percent : 0;
-  const fixedAmount = commissionType === 'fixed' ? Number(tier.fixed_amount) : 0;
-  if (commissionType === 'fixed' && (!Number.isFinite(fixedAmount) || fixedAmount < 0)) throw new Error('قيمة العمولة الثابتة غير صالحة. يرجى التواصل مع الدعم.');
-  if (commissionType === 'fixed' && fixedAmount >= base) throw new Error('يجب أن يكون مبلغ العملية أكبر من العمولة الثابتة.');
-  const commission = Math.round((commissionType === 'fixed' ? fixedAmount * (currency === 'SYP' ? rate : 1) : amount * percent / 100) * 1e6) / 1e6;
-  const netBase = commissionType === 'fixed' ? base - fixedAmount : base * (1 - percent / 100);
-  const finalAmount = Math.floor((netBase * (finalCurrency === 'SYP' ? rate : 1) + 1e-9) * (finalCurrency === 'SYP' ? 1 : 1e6)) / (finalCurrency === 'SYP' ? 1 : 1e6);
-  if (commissionType === 'fixed' && (commission >= amount || finalAmount <= 0)) throw new Error('المبلغ المتبقي بعد خصم العمولة صغير جدًا. يرجى زيادة المبلغ.');
-  return { amount, currency, finalCurrency, commission, percent, rate, finalAmount, commissionType, fixedAmount };
+
+  if (!service.directions.includes(input.direction) || !service.currencies.includes(input.balance)) throw new Error('يرجى اختيار اتجاه وعملة متاحين.');
+  const currency = input.direction === 'sell' ? 'USDT' : input.balance;
+  const finalCurrency = input.direction === 'sell' ? input.balance : 'USDT';
+  const base = currency === 'SYP' ? amount / buyUsd : amount;
+  if (base < Number(service.minimum || 0)) throw new Error(`الحد الأدنى لهذه العملية هو ${service.minimum} دولار/USDT.`);
+  if (service.maximum != null && base > Number(service.maximum)) throw new Error(`الحد الأقصى لهذه العملية هو ${service.maximum} دولار/USDT.`);
+
+  let commission = 0, networkFee = 0;
+  if (input.direction === 'sell') {
+    const tier = config.tiers
+      .filter(t => t.active && (t.direction == null || t.direction === 'sell'))
+      .sort((a,b) => Number(a.minimum) - Number(b.minimum))
+      .find(t => base >= Number(t.minimum) && (t.maximum == null || base <= Number(t.maximum)));
+    if (!tier) throw new Error('لا توجد شريحة عمولة بيع لهذا المبلغ.');
+    commission = Number(tier.fixed_amount || 0);
+    if (!Number.isFinite(commission) || commission < 0) throw new Error('عمولة البيع غير صالحة.');
+  } else {
+    const net = config.networks.find(n => String(n.id) === String(input.network));
+    if (!net) throw new Error('اختر شبكة التحويل.');
+    networkFee = Number(net.buy_fee || 0);
+    if (!Number.isFinite(networkFee) || networkFee < 0) throw new Error('رسوم الشبكة غير صالحة.');
+  }
+
+  const netBase = base - commission - networkFee;
+  if (netBase <= 0) throw new Error('المبلغ أقل من الرسوم المطلوبة.');
+  const finalAmount = input.direction === 'sell' ? (finalCurrency === 'SYP' ? netBase * sellUsd : netBase) : netBase;
+  const rate = input.direction === 'sell' ? sellUsd : buyUsd;
+  return { amount, currency, finalCurrency, commission, networkFee, rate, finalAmount, commissionType: 'fixed' };
 }
