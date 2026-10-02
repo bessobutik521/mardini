@@ -478,8 +478,8 @@ async function handleListServices(req) {
       JSON.stringify(
         services.map(s => ({
           ...s,
-          directions: JSON.parse(s.directions),
-          currencies: JSON.parse(s.currencies)
+          directions: parseList(s.directions),
+          currencies: parseList(s.currencies)
         }))
       ),
       { headers: { 'Content-Type': 'application/json' } }
@@ -530,7 +530,7 @@ async function handleGetService(req, id) {
     }
 
     return new Response(
-      JSON.stringify({ ...service, directions: JSON.parse(service.directions), currencies: JSON.parse(service.currencies) }),
+      JSON.stringify({ ...service, directions: parseList(service.directions), currencies: parseList(service.currencies) }),
       { headers: { 'Content-Type': 'application/json' } }
     );
   } catch (e) {
