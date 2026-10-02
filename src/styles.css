@@ -263,3 +263,38 @@
     width:58px!important;
   }
 }
+
+
+/* darker premium brand palette */
+:root{
+  --navy:#092f3b;
+  --teal:#087b72;
+  --gold:#b88a32;
+  --muted:#506a70;
+  --text:#102f38;
+  --line:#b9d0cd;
+}
+body{color:#102f38;background:#f4f8f7}
+.page-heading h1,.service-section-head strong,.field>span,.compact-summary span,.exchange-result>span{color:#092f3b}
+.smart-service-card,.form-card{border-color:#b9d0cd}
+.smart-service-card input,.smart-service-card select{border-color:#a9c5c1;color:#092f3b;background:#fff}
+.smart-service-card input:focus,.smart-service-card select:focus{border-color:#087b72;box-shadow:0 0 0 3px rgba(8,123,114,.12)}
+.segmented{background:#e8f2f0;border-color:#b7ceca}
+.segmented button{color:#355b60}
+.segmented button.selected{background:#092f3b!important;color:#fff!important;box-shadow:0 5px 14px rgba(9,47,59,.16)}
+.service-section-head>span{background:#d9efeb!important;color:#087b72!important;border:1px solid #b8ddd7}
+.inline-payment{background:#edf7f5;border-color:#b4d6d1}
+.payment-address-line bdi,.inline-payment-info bdi{color:#092f3b}
+.icon-copy{color:#087b72!important;background:#dcefeb!important}
+.compact-summary{border-color:#b5d0cc}
+.compact-summary strong{color:#092f3b}
+.compact-summary .summary-result{background:#dff2ee}
+.compact-summary .summary-result strong{color:#087b72}
+.primary-submit,.button.primary-submit{background:#0a5e63!important;border-color:#0a5e63!important;color:#fff!important;box-shadow:0 8px 20px rgba(9,47,59,.18)}
+.primary-submit:hover{background:#084d53!important}
+.service-proof-upload{border-color:#a9c8c3!important;background:#fbfdfd;color:#315e61}
+.service-proof-upload svg,.service-proof-upload strong{color:#087b72}
+.service-proof-upload:hover{border-color:#087b72!important;background:#edf7f5}
+.section-kicker,.gold-dot{color:#b88a32!important}
+.notice:not(.error){border-color:#d4bd88;background:#fffaf0;color:#6d5522}
+.form-footnote,.service-section-head small,.field small{color:#5b7075}
