@@ -314,3 +314,23 @@ body{color:#102f38;background:#f4f8f7}
 .submitted-proof div{display:grid;gap:3px}
 .submitted-proof strong{color:#092f3b;font-size:16px}
 .submitted-proof small{color:#55706e;font-size:13px}
+
+
+/* clearer form controls across customer and admin screens */
+.field>span{font-weight:700;color:#173f48}
+.field input,.field select,.field textarea,
+.editor input,.editor select,.editor textarea{
+  border:1.5px solid #9fbfbb!important;
+  background:#fff!important;
+  color:#102f38!important;
+  box-shadow:0 2px 7px rgba(9,47,59,.045);
+}
+.field input:focus,.field select:focus,.field textarea:focus,
+.editor input:focus,.editor select:focus,.editor textarea:focus{
+  border-color:#087b72!important;
+  box-shadow:0 0 0 3px rgba(8,123,114,.12)!important;
+  outline:none;
+}
+.field input::placeholder,.field textarea::placeholder{color:#84999d;opacity:1}
+.editor .field>span{font-weight:800;color:#123943}
+.editor select{font-weight:700}

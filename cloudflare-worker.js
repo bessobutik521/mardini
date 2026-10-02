@@ -845,8 +845,8 @@ async function handleAdminConfig(req) {
 async function adminSaveTier(req, tierId) {
   if (!await requireAdmin(req)) return json({error:'Unauthorized'},401);
   if (req.method==='DELETE') { const {error}=await supabaseAdmin.from('commission_tiers').delete().eq('id',tierId); return error?json({error:error.message},500):json({ok:true}); }
-  const b=await req.json(); const row={direction:b.direction==='buy'?'buy':'sell',minimum:Number(b.minimum),maximum:b.maximum===''||b.maximum==null?null:Number(b.maximum),type:'fixed',fixed_amount:Number(b.fixed_amount||0),percent:0,active:b.active!==false};
-  if(!Number.isInteger(row.minimum)||row.minimum<0||(row.maximum!==null&&(!Number.isInteger(row.maximum)||row.maximum<row.minimum))||!Number.isFinite(row.fixed_amount)||row.fixed_amount<0)return json({error:'حدود الشرائح يجب أن تكون أرقامًا صحيحة، والنهاية لا تقل عن البداية'},400);
+  const b=await req.json(); const type=b.type==='percent'?'percent':'fixed'; const row={direction:b.direction==='buy'?'buy':'sell',minimum:Number(b.minimum),maximum:b.maximum===''||b.maximum==null?null:Number(b.maximum),type,fixed_amount:type==='fixed'?Number(b.fixed_amount||0):0,percent:type==='percent'?Number(b.percent||0):0,active:b.active!==false};
+  if(!Number.isInteger(row.minimum)||row.minimum<0||(row.maximum!==null&&(!Number.isInteger(row.maximum)||row.maximum<row.minimum))||!Number.isFinite(row.fixed_amount)||row.fixed_amount<0||!Number.isFinite(row.percent)||row.percent<0||row.percent>100)return json({error:'تحقق من حدود الشريحة وقيمة العمولة؛ النسبة يجب أن تكون بين 0 و100.'},400);
   const {data:all}=await supabaseAdmin.from('commission_tiers').select('id,direction,minimum,maximum'); const clash=(all||[]).some(t=>String(t.id)!==String(tierId)&&t.direction===row.direction&&row.minimum<=Number(t.maximum??Infinity)&&Number(t.minimum)<=Number(row.maximum??Infinity)); if(clash)return json({error:'حدود هذه الشريحة تتداخل مع شريحة أخرى'},400);
   const q=tierId?supabaseAdmin.from('commission_tiers').update(row).eq('id',tierId):supabaseAdmin.from('commission_tiers').insert(row); const {error}=await q; return error?json({error:error.message},500):json({ok:true});
 }

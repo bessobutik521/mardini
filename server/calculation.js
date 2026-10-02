@@ -37,7 +37,10 @@ export function calculate(input, config) {
       .sort((a,b) => Number(a.minimum) - Number(b.minimum))
       .find(t => base >= Number(t.minimum) && (t.maximum == null || base <= Number(t.maximum)));
     if (!tier) throw new Error('لا توجد شريحة عمولة بيع لهذا المبلغ.');
-    commission = Number(tier.fixed_amount || 0);
+    const commissionType = tier.type === 'percent' ? 'percent' : 'fixed';
+    commission = commissionType === 'percent'
+      ? base * Number(tier.percent || 0) / 100
+      : Number(tier.fixed_amount || 0);
     if (!Number.isFinite(commission) || commission < 0) throw new Error('عمولة البيع غير صالحة.');
   } else {
     const net = config.networks.find(n => String(n.id) === String(input.network));
@@ -50,5 +53,8 @@ export function calculate(input, config) {
   if (netBase <= 0) throw new Error('المبلغ أقل من الرسوم المطلوبة.');
   const finalAmount = input.direction === 'sell' ? (finalCurrency === 'SYP' ? netBase * sellUsd : netBase) : netBase;
   const rate = input.direction === 'sell' ? sellUsd : buyUsd;
-  return { amount, currency, finalCurrency, commission, networkFee, rate, finalAmount, commissionType: 'fixed' };
+  const appliedCommissionType = input.direction === 'sell'
+    ? (config.tiers.filter(t => t.active && (t.direction == null || t.direction === 'sell')).sort((a,b) => Number(a.minimum) - Number(b.minimum)).find(t => base >= Number(t.minimum) && (t.maximum == null || base <= Number(t.maximum)))?.type === 'percent' ? 'percent' : 'fixed')
+    : 'fixed';
+  return { amount, currency, finalCurrency, commission, networkFee, rate, finalAmount, commissionType: appliedCommissionType };
 }
