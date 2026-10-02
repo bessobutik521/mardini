@@ -175,3 +175,68 @@
  .recipient-currency-row>.field>span{min-height:32px}
  .recipient-currency-row input,.recipient-currency-row select{height:46px!important}
 }
+
+
+/* canonical transaction-field sizing: intentionally overrides legacy amount rules */
+.smart-service-card .amount-input.compact-amount{
+  min-height:0!important;
+  height:auto!important;
+}
+.smart-service-card .amount-input.compact-amount input{
+  min-height:46px!important;
+  height:46px!important;
+  padding:8px 70px 8px 12px!important;
+  font-size:18px!important;
+  line-height:1.2!important;
+}
+.smart-service-card .amount-input.compact-amount>span{
+  top:50%!important;
+  transform:translateY(-50%);
+  left:14px!important;
+}
+.smart-service-card .recipient-currency-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 76px!important;
+  gap:8px!important;
+  align-items:end!important;
+}
+.smart-service-card .recipient-currency-row>.field{
+  width:auto!important;
+  min-width:0!important;
+  margin:0!important;
+}
+.smart-service-card .recipient-currency-row>.field:last-child{
+  width:76px!important;
+}
+.smart-service-card .recipient-currency-row input,
+.smart-service-card .recipient-currency-row select{
+  width:100%!important;
+  min-width:0!important;
+  min-height:46px!important;
+  height:46px!important;
+}
+.smart-service-card .recipient-currency-row select{
+  padding:7px 5px!important;
+  text-align:center!important;
+  font-size:13px!important;
+  font-weight:800!important;
+}
+@media(max-width:540px){
+  .smart-service-card .amount-input.compact-amount input{
+    min-height:44px!important;
+    height:44px!important;
+    font-size:17px!important;
+  }
+  .smart-service-card .recipient-currency-row{
+    grid-template-columns:minmax(0,1fr) 72px!important;
+    gap:7px!important;
+  }
+  .smart-service-card .recipient-currency-row>.field:last-child{
+    width:72px!important;
+  }
+  .smart-service-card .recipient-currency-row input,
+  .smart-service-card .recipient-currency-row select{
+    min-height:44px!important;
+    height:44px!important;
+  }
+}
