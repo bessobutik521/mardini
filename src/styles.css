@@ -24,3 +24,15 @@
 .wallet-owner{font-size:15px;color:var(--text)}
 .copy-payment{width:max-content;display:inline-flex;align-items:center;gap:7px;border:0;border-radius:11px;padding:10px 16px;background:var(--primary);color:#fff;font:inherit;font-weight:700;cursor:pointer}
 @media(max-width:620px){.payment-destination{grid-template-columns:1fr;text-align:center}.payment-qr{margin:auto}.payment-destination-info bdi{text-align:center}.copy-payment{margin:auto}}
+
+/* mobile viewport safety */
+html,body,#root{max-width:100%;overflow-x:hidden}
+@media(max-width:540px){
+  .home,.site-header,.header-inner,.site-footer,.page,.admin-layout,.admin-main{max-width:100%;min-width:0}
+  .hero,.hero-content,.hero-visual,.services-section,.how-section,.support-strip,.service-cards,.service-card{min-width:0;max-width:100%}
+  .hero-visual{width:100%;overflow:hidden}
+  .orbit-two{width:min(295px,88vw);height:min(295px,88vw)}
+  .transfer-card{max-width:calc(100vw - 64px)}
+  .floating-security{max-width:150px}
+  .floating-speed{max-width:170px}
+}
