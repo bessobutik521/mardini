@@ -293,7 +293,9 @@ async function handleCreateOrder(req) {
         service_note: serviceData.note,
         status: 'بانتظار الدفع',
         commission_type: service === 'exchange' ? 'none' : 'fixed',
-        commission_fixed_amount: commissionFixed
+        commission_fixed_amount: commissionFixed,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       })
       .select();
 
@@ -386,14 +388,14 @@ async function handleUploadProof(req, id) {
 
     if (proofFile && proofFile.size > 0) {
       const bytes = await proofFile.arrayBuffer();
-      const buffer = Buffer.from(bytes);
+      const buffer = new Uint8Array(bytes);
 
       let ext = 'png';
       if (buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255) {
         ext = 'jpg';
       } else if (
-        buffer.subarray(0, 8).toString('ascii') === 'RIFF' &&
-        buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+        buffer[0] === 82 && buffer[1] === 73 && buffer[2] === 70 && buffer[3] === 70 &&
+        buffer[8] === 87 && buffer[9] === 69 && buffer[10] === 66 && buffer[11] === 80
       ) {
         ext = 'webp';
       }
