@@ -124,7 +124,7 @@ async function handleConfig(req) {
 
     const { data: wallets, error: walErr } = await supabaseAdmin
       .from('wallets')
-      .select('currency, address, owner_name');
+      .select('*');
 
     if (walErr) throw walErr;
 
@@ -134,6 +134,10 @@ async function handleConfig(req) {
     }, {});
     const walletOwners = wallets.reduce((acc, w) => {
       acc[w.currency] = w.owner_name || '';
+      return acc;
+    }, {});
+    const walletQr = wallets.reduce((acc, w) => {
+      acc[w.currency] = w.qr_enabled !== false;
       return acc;
     }, {});
 
@@ -150,7 +154,8 @@ async function handleConfig(req) {
         tiers,
         networks,
         wallets: walletsObj,
-        walletOwners
+        walletOwners,
+        walletQr
       }),
       { headers: { 'Content-Type': 'application/json' } }
     );
@@ -844,8 +849,8 @@ async function adminSaveTier(req, tierId) {
   const q=tierId?supabaseAdmin.from('commission_tiers').update(row).eq('id',tierId):supabaseAdmin.from('commission_tiers').insert(row); const {error}=await q; return error?json({error:error.message},500):json({ok:true});
 }
 async function adminSaveRate(req) { if(!await requireAdmin(req))return json({error:'Unauthorized'},401);const b=await req.json(),buy=Number(b.buyUsd),sell=Number(b.sellUsd);if(!(buy>0&&sell>0))return json({error:'أسعار الصرف غير صالحة'},400);const {error}=await supabaseAdmin.from('exchange_rates').update({buy_usd_rate:buy,sell_usd_rate:sell,rate:buy,updated_at:new Date().toISOString()}).eq('id',1);return error?json({error:error.message},500):json({ok:true}); }
-async function adminSaveNetwork(req, networkId) { if(!await requireAdmin(req))return json({error:'Unauthorized'},401);if(req.method==='DELETE'){const {error}=await supabaseAdmin.from('networks').delete().eq('id',networkId);return error?json({error:error.message},500):json({ok:true});}const b=await req.json();const row={name:String(b.name||'').trim(),address:String(b.address||'').trim(),active:b.active!==false,buy_fee:Number(b.buy_fee||0)};if(!row.name)return json({error:'اسم الشبكة مطلوب'},400);if(!Number.isFinite(row.buy_fee)||row.buy_fee<0)return json({error:'رسوم الشبكة غير صالحة'},400);const q=networkId?supabaseAdmin.from('networks').update(row).eq('id',networkId):supabaseAdmin.from('networks').insert(row);const {error}=await q;return error?json({error:error.message},500):json({ok:true}); }
-async function adminSaveWallet(req, walletId) { if(!await requireAdmin(req))return json({error:'Unauthorized'},401);const b=await req.json();const row={currency:String(b.currency||'').trim().toUpperCase(),address:String(b.address||'').trim(),owner_name:String(b.owner_name||'').trim()};if(!['USD','SYP'].includes(row.currency))return json({error:'عملة حساب شام كاش غير صالحة'},400);const q=walletId?supabaseAdmin.from('wallets').update(row).eq('id',walletId):supabaseAdmin.from('wallets').insert(row);const {error}=await q;return error?json({error:error.message},500):json({ok:true}); }
+async function adminSaveNetwork(req, networkId) { if(!await requireAdmin(req))return json({error:'Unauthorized'},401);if(req.method==='DELETE'){const {error}=await supabaseAdmin.from('networks').delete().eq('id',networkId);return error?json({error:error.message},500):json({ok:true});}const b=await req.json();const row={name:String(b.name||'').trim(),address:String(b.address||'').trim(),active:b.active!==false,buy_fee:Number(b.buy_fee||0),qr_enabled:b.qr_enabled!==false};if(!row.name)return json({error:'اسم الشبكة مطلوب'},400);if(!row.address)return json({error:'عنوان USDT مطلوب'},400);if(!Number.isFinite(row.buy_fee)||row.buy_fee<0)return json({error:'رسوم الشبكة غير صالحة'},400);const q=networkId?supabaseAdmin.from('networks').update(row).eq('id',networkId):supabaseAdmin.from('networks').insert(row);const {error}=await q;return error?json({error:error.message},500):json({ok:true}); }
+async function adminSaveWallet(req, walletId) { if(!await requireAdmin(req))return json({error:'Unauthorized'},401);const b=await req.json();const row={currency:String(b.currency||'').trim().toUpperCase(),address:String(b.address||'').trim(),owner_name:String(b.owner_name||'').trim(),qr_enabled:b.qr_enabled!==false};if(!['USD','SYP'].includes(row.currency))return json({error:'عملة حساب شام كاش غير صالحة'},400);if(!row.address)return json({error:'رقم حساب شام كاش مطلوب'},400);const q=walletId?supabaseAdmin.from('wallets').update(row).eq('id',walletId):supabaseAdmin.from('wallets').insert(row);const {error}=await q;return error?json({error:error.message},500):json({ok:true}); }
 
 async function handleAdminOrders(req) {
   if (!await requireAdmin(req)) return json({ error: 'Unauthorized' }, 401);
