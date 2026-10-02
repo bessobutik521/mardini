@@ -83,3 +83,30 @@
  .exchange-result strong{font-size:24px}
  .preview-only{min-height:90px}
 }
+
+
+/* payment and mobile form refinements */
+.amount-only{grid-template-columns:1fr}
+.recipient-currency-row{display:grid;grid-template-columns:minmax(0,1fr) 132px;gap:10px;align-items:start}
+.recipient-currency-row .field:last-child select{min-width:0;text-align:center;font-weight:700}
+.inline-payment{flex-direction:column;align-items:center;text-align:center}
+.inline-payment .payment-qr{width:148px;height:148px;flex-basis:148px}
+.inline-payment-info{width:100%;justify-items:center}
+.payment-address-line{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;direction:ltr}
+.payment-address-line bdi{min-width:0;overflow-wrap:anywhere;word-break:break-word;font-weight:700}
+.icon-copy{display:grid!important;place-items:center!important;flex:0 0 34px!important;width:34px!important;height:34px!important;padding:0!important;border-radius:10px!important}
+.payment-destination{align-items:center}
+.payment-destination .payment-qr{width:160px;height:160px}
+.payment-destination-info{min-width:0}
+.payment-destination-info .payment-address-line{margin-top:6px}
+@media(max-width:540px){
+ .money-row.amount-only{grid-template-columns:1fr}
+ .recipient-currency-row{grid-template-columns:minmax(0,1fr) 112px;gap:8px}
+ .recipient-currency-row .field>span{font-size:12px}
+ .compact-amount{width:100%;min-width:0;height:auto;min-height:58px}
+ .compact-amount input{display:block;min-width:0;width:100%;font-size:24px}
+ .inline-payment .payment-qr{width:136px;height:136px;flex-basis:136px}
+ .payment-destination{flex-direction:column;text-align:center}
+ .payment-destination .payment-qr{width:148px;height:148px}
+ .payment-destination-info{width:100%}
+}
