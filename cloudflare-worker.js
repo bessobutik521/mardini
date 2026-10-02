@@ -264,7 +264,7 @@ async function handleCreateOrder(req) {
       supabaseAdmin.from('platform_settings').select('*').eq('id', 1).single()
     ]);
     if (rateErr || tierErr || netsErr || settingsErr) throw (rateErr || tierErr || netsErr || settingsErr);
-    const quoteConfig = { settings, rate: rateRow.rate, rates: { buyUsd: Number(rateRow.buy_usd_rate ?? rateRow.rate), sellUsd: Number(rateRow.sell_usd_rate ?? rateRow.rate) }, services: [{ ...serviceData, directions: typeof serviceData.directions === 'string' ? JSON.parse(serviceData.directions) : serviceData.directions, currencies: typeof serviceData.currencies === 'string' ? JSON.parse(serviceData.currencies) : serviceData.currencies }], tiers, networks: activeNetworks };
+    const quoteConfig = { settings, rate: rateRow.rate, rates: { buyUsd: Number(rateRow.buy_usd_rate ?? rateRow.rate), sellUsd: Number(rateRow.sell_usd_rate ?? rateRow.rate) }, services: [{ ...serviceData, directions: parseList(serviceData.directions), currencies: parseList(serviceData.currencies) }], tiers, networks: activeNetworks };
     const quote = calculate({ service, direction, amount, balance, network, recipient }, quoteConfig);
     const commissionPercent = 0;
     const commissionFixed = Number(quote.commission || 0) + Number(quote.networkFee || 0);
