@@ -298,3 +298,19 @@ body{color:#102f38;background:#f4f8f7}
 .section-kicker,.gold-dot{color:#b88a32!important}
 .notice:not(.error){border-color:#d4bd88;background:#fffaf0;color:#6d5522}
 .form-footnote,.service-section-head small,.field small{color:#5b7075}
+
+
+.submitted-proof{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin:24px 0 8px;
+  padding:16px 18px;
+  border:1px solid #b8d8cf;
+  border-radius:16px;
+  background:#edf8f3;
+  color:#0a5e63;
+}
+.submitted-proof div{display:grid;gap:3px}
+.submitted-proof strong{color:#092f3b;font-size:16px}
+.submitted-proof small{color:#55706e;font-size:13px}
