@@ -6,11 +6,6 @@ compatibility_date = "2024-01-01"
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-
-[[analytics_engine_datasets]]
-binding = "ANALYTICS"
-dataset = "mardini_analytics"
-
 [env.production]
   # These secrets are set in Cloudflare dashboard, NOT in code or GitHub
   SUPABASE_URL = ""
