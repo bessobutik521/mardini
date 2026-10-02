@@ -869,6 +869,22 @@ async function handleAdminStats(req) {
   return json({ today: rows.filter(o => String(o.created_at || '').startsWith(today)).length, review: rows.filter(o => o.status === 'قيد المراجعة').length, progress: rows.filter(o => o.status === 'قيد التنفيذ').length, completed: rows.filter(o => o.status === 'مكتملة').length });
 }
 
+async function handleAdminAnalytics(req, env) {
+  if (!await requireAdmin(req)) return json({ error: 'Unauthorized' }, 401);
+  if (!env.ANALYTICS) return json({ enabled: false, today: 0, week: 0, month: 0 });
+  const count = async days => {
+    const q = `SELECT SUM(_sample_interval) AS total FROM mardini_analytics WHERE timestamp >= NOW() - INTERVAL '${days}' DAY AND blob1 = 'pageview'`;
+    const r = await env.ANALYTICS.query(q);
+    return Number(r.data?.[0]?.total || 0);
+  };
+  try {
+    const [today, week, month] = await Promise.all([count(1), count(7), count(30)]);
+    return json({ enabled: true, today, week, month });
+  } catch (e) {
+    return json({ enabled: true, today: 0, week: 0, month: 0, note: 'Analytics data is still warming up.' });
+  }
+}
+
 // GET /api/admin/logout - Admin logout
 async function handleAdminLogout(req) {
   try {
@@ -898,6 +914,11 @@ export default {
 
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // Privacy-friendly aggregate traffic events. No IP, cookie, user-agent or personal data is stored.
+    if (env.ANALYTICS && request.method === 'GET' && !path.startsWith('/api/') && !path.startsWith('/admin') && !path.includes('.')) {
+      env.ANALYTICS.writeDataPoint({ blobs: ['pageview', path], doubles: [1] });
+    }
 
     // Static frontend is served from the Cloudflare ASSETS binding.
     // Keep API handling in the Worker and delegate all non-API routes to the SPA assets.
@@ -1007,6 +1028,7 @@ export default {
             if (action === 'config' && request.method === 'GET') return handleAdminConfig(request);
             if (action === 'orders' && request.method === 'GET') return handleAdminOrders(request);
             if (action === 'stats' && request.method === 'GET') return handleAdminStats(request);
+            if (action === 'analytics' && request.method === 'GET') return handleAdminAnalytics(request, env);
             if (action === 'settings' && request.method === 'PUT') return handleUpdateSettings(request);
             if (action === 'services' && subId && request.method === 'PUT') return handleUpdateService(request, subId);
             if (action === 'wallets' && ['POST','PUT'].includes(request.method)) return adminSaveWallet(request, subId);
