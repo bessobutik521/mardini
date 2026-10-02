@@ -139,3 +139,23 @@
  .recipient-currency-row{grid-template-columns:minmax(0,1fr) 104px;align-items:end}
  .recipient-currency-row input,.recipient-currency-row .field:last-child select{height:50px}
 }
+
+
+/* final mobile alignment pass */
+.service-section .amount-only{margin:0}
+.service-section .compact-amount{box-sizing:border-box;min-height:48px!important;height:48px!important}
+.service-section .compact-amount input{height:46px!important;line-height:1.2!important;padding-top:6px!important;padding-bottom:6px!important}
+.recipient-currency-row{grid-template-columns:minmax(0,3fr) minmax(96px,1fr);gap:10px;align-items:end}
+.recipient-currency-row>.field{min-width:0;margin:0}
+.recipient-currency-row>.field>span{min-height:24px;display:flex;align-items:flex-end;color:#123f46;font-weight:700;line-height:1.25}
+.recipient-currency-row input,.recipient-currency-row select{box-sizing:border-box;width:100%;height:50px!important;margin:0}
+@media(max-width:540px){
+ .service-section{gap:12px}
+ .service-section .compact-amount{min-height:46px!important;height:46px!important}
+ .service-section .compact-amount input{height:44px!important;font-size:19px!important}
+ .recipient-currency-row{grid-template-columns:minmax(0,72fr) minmax(92px,28fr);gap:8px;align-items:end}
+ .recipient-currency-row>.field>span{min-height:40px;font-size:13px;line-height:1.35}
+ .recipient-currency-row input,.recipient-currency-row select{height:48px!important}
+ .recipient-currency-row input{padding-inline:12px}
+ .recipient-currency-row select{padding-inline:9px;font-size:15px}
+}
