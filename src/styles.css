@@ -110,3 +110,32 @@
  .payment-destination .payment-qr{width:148px;height:148px}
  .payment-destination-info{width:100%}
 }
+
+
+/* compact, higher-contrast transaction form */
+.smart-service-card{border-color:#c9dedb}
+.service-section{border-color:#c7ddda}
+.service-section-head strong,.field>span{color:#123f46}
+.service-section-head>span{background:#dff4f0;color:#087d73}
+.compact-amount{min-height:52px!important;height:52px!important;border-color:#b7d3cf!important}
+.compact-amount input{font-size:21px!important;color:#123f46!important;font-weight:750!important;padding-block:8px!important}
+.compact-amount span{color:#087d73!important;font-weight:750}
+.recipient-currency-row{grid-template-columns:minmax(0,1fr) 118px;align-items:end}
+.recipient-currency-row .field:last-child select{height:52px;border-color:#9fc9c3;color:#123f46;background:#eff9f7}
+.recipient-currency-row input{height:52px;border-color:#b7d3cf}
+.compact-summary{border-color:#b9d8d3;background:#f1f9f7}
+.compact-summary span{color:#48676c}
+.compact-summary strong{color:#123f46}
+.compact-summary .summary-result strong{color:#087d73}
+.proof-preview{background:#f8fbfb}
+.inline-payment{border-color:#b7d8d3;background:#eff9f7}
+.inline-payment-info small{color:#45666b}
+.inline-payment-info bdi{color:#123f46}
+.icon-copy{background:#078c80!important;color:#fff!important}
+.primary-submit{box-shadow:0 8px 22px rgba(8,125,115,.18)}
+@media(max-width:540px){
+ .compact-amount{min-height:50px!important;height:50px!important}
+ .compact-amount input{font-size:20px!important;padding-block:6px!important}
+ .recipient-currency-row{grid-template-columns:minmax(0,1fr) 104px;align-items:end}
+ .recipient-currency-row input,.recipient-currency-row .field:last-child select{height:50px}
+}
